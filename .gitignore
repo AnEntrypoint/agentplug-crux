@@ -2,3 +2,4 @@
 /.gm
 /.claude
 crux-manifest.json
+*.stackdump
