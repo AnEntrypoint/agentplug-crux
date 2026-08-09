@@ -126,7 +126,7 @@ pub fn select<'a>(
     min: usize,
     max: usize,
 ) -> Vec<ScoredShape<'a>> {
-    scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+    scored.sort_by(|a, b| b.score.total_cmp(&a.score));
     let n = scored.len();
     if n == 0 {
         return scored;

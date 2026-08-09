@@ -159,7 +159,7 @@ impl TimingStats {
         }
         let mut quantiles = HashMap::new();
         for (action, mut durations) in by_action {
-            durations.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            durations.sort_by(|a, b| a.total_cmp(b));
             quantiles.insert(
                 action,
                 (
