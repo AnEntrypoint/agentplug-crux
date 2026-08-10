@@ -35,10 +35,11 @@ pub fn handle_scan(body: &Value) -> u64 {
     };
 
     let max_files = usize_field(body, "max_files", 50_000);
+    let context_window = usize_field(body, "context_window", 3);
     let events = crate::wasm_ingest::scan_project(&root, max_files);
     let raw_events = events.len();
 
-    let shapes = crate::dedup::dedup(events.into_iter());
+    let shapes = crate::dedup::dedup(events.iter().cloned());
     let shapes_after_dedup = shapes.len();
     let total_occurrences: u64 = shapes.iter().map(|s| s.count).sum();
 
@@ -72,7 +73,7 @@ pub fn handle_scan(body: &Value) -> u64 {
     let distinct_actors = field_freq.tables.get("actor").map_or(0, |t| t.len());
     let (top_actions_by_occurrence, top_actors_by_occurrence) = manifest_top_values(&field_freq, 10);
     let shapes_selected = selected.len();
-    let dump = dump_as_values(&selected);
+    let dump = dump_as_values(&selected, &events, context_window);
     let score_range = score_range(&selected);
 
     let manifest = Manifest {

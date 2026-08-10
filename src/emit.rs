@@ -4,6 +4,7 @@ use serde::Serialize;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
+use crate::context::ContextIndex;
 use crate::event::CanonicalEvent;
 use crate::score::ScoredShape;
 
@@ -55,6 +56,9 @@ struct DumpEntry<'a> {
     last_seen_ms: Option<i64>,
     last_seen: Option<String>,
     representative_event: &'a CanonicalEvent,
+    context_before: Vec<&'a CanonicalEvent>,
+    context_after: Vec<&'a CanonicalEvent>,
+    cross_references: Vec<String>,
     source: Source,
 }
 
@@ -78,6 +82,9 @@ struct SchemaFields {
     first_seen: &'static str,
     last_seen: &'static str,
     representative_event: &'static str,
+    context_before: &'static str,
+    context_after: &'static str,
+    cross_references: &'static str,
     source: &'static str,
 }
 
@@ -95,13 +102,28 @@ fn schema_meta() -> SchemaMeta {
             first_seen: "RFC3339 UTC, alongside the epoch-ms field, null if no event in this shape carried a parseable timestamp.",
             last_seen: "RFC3339 UTC, alongside the epoch-ms field, null if no event in this shape carried a parseable timestamp.",
             representative_event: "The first raw event that produced this shape, byte-faithful canonical form (actor/action/status/duration_ms/fields).",
+            context_before: "Up to N raw events immediately preceding representative_event in the same source file (default N=3, --context-window), included verbatim as situational scaffolding -- not re-scored, not themselves signal.",
+            context_after: "Up to N raw events immediately following representative_event in the same source file, same caveat as context_before.",
+            cross_references: "shape_id of every other shape in this dump whose representative_event shares an actor with this one -- the cheapest resolvable session/trace key. Empty if this shape's actor is unset or shared with no other selected shape.",
             source: "File and 1-indexed line number the representative_event came from, for follow-up reads.",
         },
         dominant_signal_values: ["field", "transition", "timing", "count"],
     }
 }
 
-fn dump_entry<'a>(i: usize, s: &'a ScoredShape<'a>) -> DumpEntry<'a> {
+#[allow(clippy::too_many_arguments)]
+fn dump_entry<'a>(
+    i: usize,
+    s: &'a ScoredShape<'a>,
+    ctx: &ContextIndex<'a>,
+    context_window: usize,
+    cross_refs: &[String],
+) -> DumpEntry<'a> {
+    let (context_before, context_after) = ctx.window(
+        &s.shape.representative.source_file,
+        s.shape.representative.source_line,
+        context_window,
+    );
     DumpEntry {
         shape_id: format!("{:016x}", s.shape.shape_hash),
         rank: i + 1,
@@ -119,6 +141,9 @@ fn dump_entry<'a>(i: usize, s: &'a ScoredShape<'a>) -> DumpEntry<'a> {
         last_seen_ms: s.shape.last_seen,
         last_seen: format_ms(s.shape.last_seen),
         representative_event: &s.shape.representative,
+        context_before,
+        context_after,
+        cross_references: cross_refs.to_vec(),
         source: Source {
             file: s.shape.representative.source_file.clone(),
             line: s.shape.representative.source_line,
@@ -126,11 +151,18 @@ fn dump_entry<'a>(i: usize, s: &'a ScoredShape<'a>) -> DumpEntry<'a> {
     }
 }
 
-pub fn write_jsonl<W: Write>(mut out: W, scored: &[ScoredShape]) -> std::io::Result<()> {
+pub fn write_jsonl<W: Write>(
+    mut out: W,
+    scored: &[ScoredShape],
+    raw_events: &[CanonicalEvent],
+    context_window: usize,
+) -> std::io::Result<()> {
+    let ctx = ContextIndex::build(raw_events);
+    let cross_refs = crate::context::cross_references(scored);
     serde_json::to_writer(&mut out, &schema_meta())?;
     writeln!(out)?;
     for (i, s) in scored.iter().enumerate() {
-        serde_json::to_writer(&mut out, &dump_entry(i, s))?;
+        serde_json::to_writer(&mut out, &dump_entry(i, s, &ctx, context_window, &cross_refs[i]))?;
         writeln!(out)?;
     }
     Ok(())
@@ -140,14 +172,18 @@ pub fn write_jsonl<W: Write>(mut out: W, scored: &[ScoredShape]) -> std::io::Res
 /// instead of newline-delimited bytes -- for the wasm plugin path, which
 /// returns one JSON response rather than writing a file. `values[0]` is
 /// the `__meta` schema entry, `values[1..]` are the ranked shapes.
-pub fn dump_as_values(scored: &[ScoredShape]) -> Vec<serde_json::Value> {
+pub fn dump_as_values(
+    scored: &[ScoredShape],
+    raw_events: &[CanonicalEvent],
+    context_window: usize,
+) -> Vec<serde_json::Value> {
+    let ctx = ContextIndex::build(raw_events);
+    let cross_refs = crate::context::cross_references(scored);
     let mut values = vec![serde_json::to_value(schema_meta()).unwrap_or(serde_json::Value::Null)];
-    values.extend(
-        scored
-            .iter()
-            .enumerate()
-            .map(|(i, s)| serde_json::to_value(dump_entry(i, s)).unwrap_or(serde_json::Value::Null)),
-    );
+    values.extend(scored.iter().enumerate().map(|(i, s)| {
+        serde_json::to_value(dump_entry(i, s, &ctx, context_window, &cross_refs[i]))
+            .unwrap_or(serde_json::Value::Null)
+    }));
     values
 }
 

@@ -125,7 +125,7 @@ pub extern "C" fn plugin_call(verb_ptr: u32, verb_len: u32, body_ptr: u32, body_
             "plugin": "crux",
             "verbs": ["scan", "capabilities"],
             "payload_field": { "scan": "dump" },
-            "description": "Concentrates statistically rare/surprising material out of a project's own .jsonl trace files (session transcripts, workflow logs) into a small uninterpreted dump. scan takes an optional {\"root\": \"relative/path\"} (default: project root) and the same select_percentile/select_min/select_max/weights/smoothing knobs as the crux CLI.",
+            "description": "Concentrates statistically rare/surprising material out of a project's own .jsonl trace files (session transcripts, workflow logs) into a small uninterpreted dump. scan takes an optional {\"root\": \"relative/path\"} (default: project root) and the same select_percentile/select_min/select_max/weights/smoothing/context_window knobs as the crux CLI.",
         })),
         _ => return_json(serde_json::json!({"ok": false, "error": "unknown_verb", "verb": verb})),
     }

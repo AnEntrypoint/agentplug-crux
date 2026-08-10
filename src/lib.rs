@@ -1,4 +1,5 @@
 pub mod baseline;
+pub mod context;
 pub mod dedup;
 pub mod durations;
 pub mod emit;

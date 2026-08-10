@@ -49,6 +49,11 @@ struct Args {
     /// Output path for the run manifest.
     #[arg(long, default_value = "crux-manifest.json")]
     manifest: PathBuf,
+
+    /// Events immediately before/after each selected shape (same source
+    /// file) to include as context, 0 to disable.
+    #[arg(long, default_value_t = 3)]
+    context_window: usize,
 }
 
 fn main() -> io::Result<()> {
@@ -60,7 +65,7 @@ fn main() -> io::Result<()> {
     }
     let raw_events = all_events.len();
 
-    let shapes = dedup::dedup(all_events.into_iter());
+    let shapes = dedup::dedup(all_events.iter().cloned());
     let total_occurrences: u64 = shapes.iter().map(|s| s.count).sum();
 
     let field_freq = FieldFreq::build(&shapes);
@@ -101,11 +106,11 @@ fn main() -> io::Result<()> {
     match &args.out {
         Some(path) => {
             let f = BufWriter::new(File::create(path)?);
-            emit::write_jsonl(f, &selected)?;
+            emit::write_jsonl(f, &selected, &all_events, args.context_window)?;
         }
         None => {
             let stdout = io::stdout();
-            emit::write_jsonl(stdout.lock(), &selected)?;
+            emit::write_jsonl(stdout.lock(), &selected, &all_events, args.context_window)?;
         }
     }
 
