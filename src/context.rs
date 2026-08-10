@@ -5,7 +5,11 @@ use crate::score::ScoredShape;
 
 /// Builds a `source_file -> events in that file, sorted by source_line`
 /// index once, so every selected shape's context window is a slice lookup
-/// instead of a fresh scan of the whole corpus.
+/// instead of a fresh scan of the whole corpus. Every ingest mode is
+/// responsible for making `source_line` unique within a file (jsonl mode:
+/// the real line number; git-log mode: a per-file chronological sequence
+/// number, since a git change has no line number of its own) -- context
+/// windows are meaningless without that.
 pub struct ContextIndex<'a> {
     by_file: HashMap<&'a str, Vec<&'a CanonicalEvent>>,
 }
@@ -24,11 +28,13 @@ impl<'a> ContextIndex<'a> {
 
     /// Up to `window` events immediately before and after `(source_file,
     /// source_line)` in the same file, split into (before, after), each in
-    /// original order. Empty on either side if the shape sits at a file
-    /// boundary or its file/line was not found (e.g. a representative event
-    /// whose exact line no longer matches after dedup's first-seen pick --
-    /// should not happen in practice, but context is scaffolding, not
-    /// signal, so a miss degrades to "no context" rather than an error).
+    /// file order. Empty on either side if the shape sits at a file
+    /// boundary or its file/line was not found. If more than one event
+    /// shares the same `(source_file, source_line)` (an ingest-mode bug --
+    /// see the struct doc), the window anchors at whichever one `position`
+    /// finds first, silently ignoring the rest; this degrades to
+    /// approximate-but-plausible context rather than a visible error,
+    /// since context is scaffolding, not signal.
     pub fn window(
         &self,
         source_file: &str,
@@ -50,9 +56,10 @@ impl<'a> ContextIndex<'a> {
 }
 
 /// Two selected shapes cross-reference when their representative events
-/// share an actor (crux's actor is always the session id, so this is
-/// "occurred in the same session") -- the cheapest resolvable session/trace
-/// key, matching the spec's "same session key" cross-reference case without
+/// share an actor (crux's actor is whatever the source format's session/
+/// actor concept maps to -- session id for jsonl transcripts, commit
+/// author for git-log mode) -- the cheapest resolvable session/trace key,
+/// matching the spec's "same session key" cross-reference case without
 /// needing a separate trace-key config.
 pub fn cross_references<'a>(scored: &'a [ScoredShape<'a>]) -> Vec<Vec<String>> {
     let mut by_actor: HashMap<&str, Vec<usize>> = HashMap::new();

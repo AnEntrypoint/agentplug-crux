@@ -6,15 +6,39 @@ use clap::Parser;
 
 use agentplug_crux::baseline::{FieldFreq, TimingStats, TransitionFreq};
 use agentplug_crux::score::Weights;
-use agentplug_crux::{dedup, emit, native_ingest, score};
+use agentplug_crux::{dedup, emit, ingest_files_mode, ingest_gitlog, native_ingest, score};
 
-/// crux: concentrate rare/surprising material out of large workflow trace corpora.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum Mode {
+    /// .jsonl trace files: one event per record (the original use case --
+    /// session transcripts, workflow/orchestrator logs).
+    Jsonl,
+    /// Any directory: one event per file (extension, size, depth, dir
+    /// name), no file content parsing -- works on any codebase or file
+    /// tree, surfaces structural outliers (a wildly rare extension, a file
+    /// far outside its extension's typical size band).
+    Files,
+    /// A git repository: one event per (commit, changed file) via
+    /// `git log --numstat` -- surfaces history outliers (unusually large
+    /// changes, rare authorship/file-type combinations).
+    Gitlog,
+}
+
+/// crux: concentrate rare/surprising material out of large, low-signal-density corpora.
 #[derive(Parser)]
 #[command(version)]
 struct Args {
-    /// Input paths (files or directories, recursed) to scan for .jsonl transcripts.
+    /// Input paths (files or directories, recursed) to scan.
     #[arg(required = true)]
     inputs: Vec<PathBuf>,
+
+    /// What an "event" is: jsonl trace records, per-file structural
+    /// metadata over any codebase, or git commit history.
+    #[arg(long, value_enum, default_value_t = Mode::Jsonl)]
+    mode: Mode,
+    /// gitlog mode only: how many recent commits to scan.
+    #[arg(long, default_value_t = 5000)]
+    max_commits: usize,
 
     /// Laplace smoothing constant applied to all frequency tables.
     #[arg(long, default_value_t = 1.0)]
@@ -61,7 +85,11 @@ fn main() -> io::Result<()> {
 
     let mut all_events = Vec::new();
     for input in &args.inputs {
-        all_events.extend(native_ingest::ingest_path(input));
+        match args.mode {
+            Mode::Jsonl => all_events.extend(native_ingest::ingest_jsonl_path(input)),
+            Mode::Files => all_events.extend(ingest_files_mode::scan_codebase(input)),
+            Mode::Gitlog => all_events.extend(ingest_gitlog::scan_git_log(input, args.max_commits)),
+        }
     }
     let raw_events = all_events.len();
 
@@ -148,6 +176,14 @@ fn main() -> io::Result<()> {
         manifest.shapes_selected,
         args.manifest.display()
     );
+    if manifest.raw_events == 0 {
+        let hint = match args.mode {
+            Mode::Jsonl => "no .jsonl files found under the given path(s)",
+            Mode::Files => "no files found under the given path(s) after skip-list/.gitignore filtering",
+            Mode::Gitlog => "no commits found -- is this path a git repository, and is `git` on PATH?",
+        };
+        eprintln!("crux: zero events ingested ({hint})");
+    }
 
     Ok(())
 }

@@ -75,3 +75,24 @@ pub fn is_skipped_filename(name: &str) -> bool {
 pub fn is_hidden_segment(seg: &str) -> bool {
     seg.starts_with('.') && seg != "." && seg != ".."
 }
+
+/// Minimal noise list for `--mode files`/`--mode gitlog`, deliberately
+/// smaller than SKIP_DIRS above. That list is tuned for a code-search
+/// index (skip anything that isn't source worth grepping), which
+/// necessarily also excludes generically-named directories that are
+/// nonetheless real, authored project content on some repos --
+/// `site`/`weights`/`.cargo` on this very project. Structural-outlier
+/// scanning's whole premise is "let rarity decide, don't hardcode an
+/// opinion about what's noise", so this list only excludes what is
+/// unconditionally never authored content: VCS internals and the handful
+/// of build-output directory names confirmed by ecosystem convention to
+/// be pure derived output, never a place a human puts real files.
+pub const STRUCTURAL_SKIP_DIRS: &[&str] = &[
+    ".git", ".svn", ".hg", ".bzr", "CVS",
+    "node_modules", "target", "dist", "build", "__pycache__",
+    ".venv", "venv", "ENV",
+];
+
+pub fn is_structural_skip_dir(seg: &str) -> bool {
+    STRUCTURAL_SKIP_DIRS.contains(&seg)
+}
