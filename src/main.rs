@@ -5,6 +5,7 @@ mod event;
 mod ingest;
 mod normalize;
 mod score;
+mod skiplist;
 
 use std::fs::File;
 use std::io::{self, BufWriter};
@@ -93,6 +94,8 @@ fn main() -> io::Result<()> {
 
     let distinct_actions = field_freq.tables.get("action").map_or(0, |t| t.len());
     let distinct_actors = field_freq.tables.get("actor").map_or(0, |t| t.len());
+    let (top_actions_by_occurrence, top_actors_by_occurrence) =
+        emit::manifest_top_values(&field_freq, 10);
 
     let selected = score::select(
         scored,
@@ -101,6 +104,7 @@ fn main() -> io::Result<()> {
         args.select_max,
     );
     let shapes_selected = selected.len();
+    let score_range = emit::score_range(&selected);
 
     match &args.out {
         Some(path) => {
@@ -125,6 +129,9 @@ fn main() -> io::Result<()> {
         shapes_selected,
         distinct_actions,
         distinct_actors,
+        top_actions_by_occurrence,
+        top_actors_by_occurrence,
+        score_range,
         weights: emit::WeightsOut {
             field: weights.field,
             transition: weights.transition,
