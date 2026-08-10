@@ -6,7 +6,7 @@ use clap::Parser;
 
 use agentplug_crux::baseline::{FieldFreq, TimingStats, TransitionFreq};
 use agentplug_crux::score::Weights;
-use agentplug_crux::{dedup, emit, ingest_files_mode, ingest_gitlog, native_ingest, score};
+use agentplug_crux::{dedup, emit, ingest_files_mode, ingest_gitlog, native_ingest, near_dup, score};
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
 enum Mode {
@@ -78,16 +78,29 @@ struct Args {
     /// file) to include as context, 0 to disable.
     #[arg(long, default_value_t = 3)]
     context_window: usize,
+
+    /// --mode files only: Normalized Compression Distance threshold below
+    /// which another file counts as a near-duplicate of a selected shape
+    /// (0.0 = identical after compression, 1.0 = no shared structure).
+    /// 0 disables near-duplicate clustering entirely -- it is opt-in
+    /// extra work (a gzip pass per compared file pair), not always-on.
+    #[arg(long, default_value_t = 0.0)]
+    ncd_threshold: f64,
 }
 
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
     let mut all_events = Vec::new();
+    let mut corpus_files = Vec::new();
     for input in &args.inputs {
         match args.mode {
             Mode::Jsonl => all_events.extend(native_ingest::ingest_jsonl_path(input)),
-            Mode::Files => all_events.extend(ingest_files_mode::scan_codebase(input)),
+            Mode::Files => {
+                let files = ingest_files_mode::find_codebase_files(input);
+                all_events.extend(ingest_files_mode::scan_codebase_files(input, &files));
+                corpus_files.extend(files);
+            }
             Mode::Gitlog => all_events.extend(ingest_gitlog::scan_git_log(input, args.max_commits)),
         }
     }
@@ -131,14 +144,23 @@ fn main() -> io::Result<()> {
     let shapes_selected = selected.len();
     let score_range = emit::score_range(&selected);
 
+    let near_duplicates: Vec<Vec<(String, f64)>> = if matches!(args.mode, Mode::Files) {
+        near_dup::find_near_duplicates(&selected, &corpus_files, args.ncd_threshold)
+            .into_iter()
+            .map(|hits| hits.into_iter().map(|h| (h.path, h.ncd)).collect())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     match &args.out {
         Some(path) => {
             let f = BufWriter::new(File::create(path)?);
-            emit::write_jsonl(f, &selected, &all_events, args.context_window)?;
+            emit::write_jsonl(f, &selected, &all_events, args.context_window, &near_duplicates)?;
         }
         None => {
             let stdout = io::stdout();
-            emit::write_jsonl(stdout.lock(), &selected, &all_events, args.context_window)?;
+            emit::write_jsonl(stdout.lock(), &selected, &all_events, args.context_window, &near_duplicates)?;
         }
     }
 

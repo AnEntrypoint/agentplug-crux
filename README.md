@@ -78,6 +78,34 @@ mode's larger code-index-tuned list, since a generically-named directory
 content worth scoring -- hiding it first would defeat the "let rarity
 decide" premise these modes exist for.
 
+### Near-duplicate detection (`--mode files`, `--ncd-threshold`)
+
+Exact-shape dedup collapses byte-identical repeats, but structurally
+cannot see near-duplicates: a copy-pasted config with one field changed,
+or a vendored variant of the same source file, hash completely
+differently despite being 99% the same content. `--ncd-threshold <0..1>`
+(disabled by default, opt-in since it's real extra work) adds Normalized
+Compression Distance -- `(C(a+b) - min(C(a),C(b))) / max(C(a),C(b))` via
+gzip, pure Rust (`flate2`'s `rust_backend`, no C toolchain, compiles
+identically on both targets even though this specific feature is CLI-only
+today) -- as a content-aware signal on top of the otherwise purely
+structural/statistical scoring. For each *selected* shape (never every
+file against every other file -- bounded to O(selected × corpus), with a
+same-extension + same-order-of-magnitude-size prefilter that skips the
+actual gzip calls for pairs that could not plausibly qualify), other
+corpus files scoring at or below the threshold appear in that shape's
+`near_duplicates` field, sorted most-similar first.
+
+**Known limitation, by design, not a bug:** DEFLATE's sliding window is a
+hard-capped 32KB, so NCD stops being meaningful once two files (or their
+shared region) exceed a few multiples of that -- confirmed empirically: a
+real ~180KB near-duplicate pair (99% identical, a handful of changed
+lines in an otherwise-identical file) scored NCD≈0.98 (maximally
+"different") before a size cap existed, a false negative caused purely by
+file size. Files above 96KB are never compared (no `near_duplicates`
+entry for them, not an error) -- this feature reliably covers
+small-to-medium files; large-file near-duplication is a known gap.
+
 ## As an agentplug plugin
 
 `cargo build --release --target wasm32-wasip1 --lib` builds
@@ -115,11 +143,12 @@ selected shape).
 ## Source layout
 
 `event.rs`/`normalize.rs`/`dedup.rs`/`baseline.rs`/`score.rs`/
-`skiplist.rs`/`durations.rs`/`context.rs`/`emit.rs` are shared, pure logic
-with no I/O, compiled into both targets. `walk.rs` (shared directory-walk
-helper over `ignore::WalkBuilder`, native-only), `native_ingest.rs`
-(jsonl mode), `ingest_files_mode.rs` (files mode), `ingest_gitlog.rs`
-(gitlog mode, shells out to `git`), and `main.rs` (the CLI, mode
-selection) compile for the native target only; `abi.rs`/`wasm_ingest.rs`/
-`pipeline.rs` (host-import-driven, the plugin's `scan` verb, jsonl mode
-only) compile for `wasm32-wasip1` only.
+`skiplist.rs`/`durations.rs`/`context.rs`/`emit.rs`/`ncd.rs` are shared,
+pure logic with no I/O, compiled into both targets. `walk.rs` (shared
+directory-walk helper over `ignore::WalkBuilder`, native-only),
+`native_ingest.rs` (jsonl mode), `ingest_files_mode.rs` (files mode),
+`ingest_gitlog.rs` (gitlog mode, shells out to `git`), `near_dup.rs`
+(files-mode near-duplicate clustering, real file I/O), and `main.rs` (the
+CLI, mode selection) compile for the native target only;
+`abi.rs`/`wasm_ingest.rs`/`pipeline.rs` (host-import-driven, the plugin's
+`scan` verb, jsonl mode only) compile for `wasm32-wasip1` only.

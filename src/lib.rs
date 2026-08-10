@@ -4,6 +4,7 @@ pub mod dedup;
 pub mod durations;
 pub mod emit;
 pub mod event;
+pub mod ncd;
 pub mod normalize;
 pub mod score;
 pub mod skiplist;
@@ -14,6 +15,8 @@ pub mod ingest_files_mode;
 pub mod ingest_gitlog;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native_ingest;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod near_dup;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod walk;
 

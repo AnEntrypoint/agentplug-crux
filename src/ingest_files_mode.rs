@@ -58,6 +58,18 @@ fn size_and_line_count(path: &Path) -> Option<(u64, Option<u64>)> {
     Some((size_bytes, line_count))
 }
 
+/// Directory walk this mode uses, exposed separately so a caller can get
+/// the raw file list once (e.g. to also drive near-dup clustering, which
+/// needs file paths, not `CanonicalEvent`s) and pass it to
+/// `scan_codebase_files` rather than have both re-walk the same tree.
+pub fn find_codebase_files(root: &Path) -> Vec<std::path::PathBuf> {
+    find_files(root, SkipMode::StructuralScan)
+}
+
+/// `scan_codebase` split into its walk (`find_codebase_files`) and this
+/// per-file mapping step, so a caller needing both the events and the raw
+/// file list (near-dup clustering) walks the tree once.
+///
 /// One `CanonicalEvent` per file: no content is read beyond a streaming
 /// binary sniff and newline count (never the whole file into memory), so
 /// this mode is cheap enough to run over an entire codebase including
@@ -76,11 +88,11 @@ fn size_and_line_count(path: &Path) -> Option<(u64, Option<u64>)> {
 /// free "this file's size is way outside this extension's typical band"
 /// signal -- crux has no dedicated "size" axis, but duration_ms's timing
 /// quantiles/deviation are exactly that computation already built.
-pub fn scan_codebase(root: &Path) -> Vec<CanonicalEvent> {
-    find_files(root, SkipMode::StructuralScan)
-        .into_iter()
+pub fn scan_codebase_files(root: &Path, files: &[std::path::PathBuf]) -> Vec<CanonicalEvent> {
+    files
+        .iter()
         .filter_map(|path| {
-            let rel = path.strip_prefix(root).unwrap_or(&path);
+            let rel = path.strip_prefix(root).unwrap_or(path.as_path());
             let mut components = rel.components();
             let top_level = components
                 .next()
@@ -97,7 +109,7 @@ pub fn scan_codebase(root: &Path) -> Vec<CanonicalEvent> {
                 .map(|e| e.to_string_lossy().into_owned())
                 .unwrap_or_else(|| "(no-ext)".to_string());
 
-            let (size_bytes, line_count) = size_and_line_count(&path)?;
+            let (size_bytes, line_count) = size_and_line_count(path)?;
 
             let mut fields: BTreeMap<String, FieldValue> = BTreeMap::new();
             fields.insert("depth".into(), FieldValue::Num(depth as f64));

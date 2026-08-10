@@ -43,6 +43,17 @@ struct Source {
     line: u64,
 }
 
+/// (path, ncd) pair, plugin-agnostic shape so `emit.rs` (shared, compiles
+/// for both native and wasm targets) never depends on `near_dup.rs`
+/// (native-only: it does real file I/O gzip currently has no wasm-plugin
+/// path for). The `--mode files`-only feature; other modes/the plugin's
+/// jsonl-only `scan` verb always pass an empty slice per entry.
+#[derive(Serialize)]
+struct NearDuplicateOut {
+    path: String,
+    ncd: f64,
+}
+
 #[derive(Serialize)]
 struct DumpEntry<'a> {
     shape_id: String,
@@ -59,6 +70,7 @@ struct DumpEntry<'a> {
     context_before: Vec<&'a CanonicalEvent>,
     context_after: Vec<&'a CanonicalEvent>,
     cross_references: Vec<String>,
+    near_duplicates: Vec<NearDuplicateOut>,
     source: Source,
 }
 
@@ -85,6 +97,7 @@ struct SchemaFields {
     context_before: &'static str,
     context_after: &'static str,
     cross_references: &'static str,
+    near_duplicates: &'static str,
     source: &'static str,
 }
 
@@ -105,6 +118,7 @@ fn schema_meta() -> SchemaMeta {
             context_before: "Up to N raw events immediately preceding representative_event in the same source file (default N=3, --context-window), included verbatim as situational scaffolding -- not re-scored, not themselves signal.",
             context_after: "Up to N raw events immediately following representative_event in the same source file, same caveat as context_before.",
             cross_references: "shape_id of every other shape in this dump whose representative_event shares an actor with this one -- the cheapest resolvable session/trace key. Empty if this shape's actor is unset or shared with no other selected shape.",
+            near_duplicates: "--mode files only, empty otherwise or when disabled (--ncd-threshold 0). Other files in the corpus whose content gzip-compresses near-identically to this one (Normalized Compression Distance below --ncd-threshold) -- the signal exact-shape hashing cannot see, since a copy-pasted config with one field changed or a vendored variant hashes completely differently but compresses together almost as well as either compresses alone. Sorted most-similar (lowest ncd) first.",
             source: "File and 1-indexed line number the representative_event came from, for follow-up reads.",
         },
         dominant_signal_values: ["field", "transition", "timing", "count"],
@@ -118,6 +132,7 @@ fn dump_entry<'a>(
     ctx: &ContextIndex<'a>,
     context_window: usize,
     cross_refs: &[String],
+    near_dups: &[(String, f64)],
 ) -> DumpEntry<'a> {
     let (context_before, context_after) = ctx.window(
         &s.shape.representative.source_file,
@@ -144,6 +159,10 @@ fn dump_entry<'a>(
         context_before,
         context_after,
         cross_references: cross_refs.to_vec(),
+        near_duplicates: near_dups
+            .iter()
+            .map(|(path, ncd)| NearDuplicateOut { path: path.clone(), ncd: *ncd })
+            .collect(),
         source: Source {
             file: s.shape.representative.source_file.clone(),
             line: s.shape.representative.source_line,
@@ -151,18 +170,23 @@ fn dump_entry<'a>(
     }
 }
 
+/// `near_duplicates[i]` is the `(path, ncd)` list for `scored[i]` --
+/// `--mode files` only; pass a same-length slice of empty vecs from every
+/// other mode or when the feature is disabled.
 pub fn write_jsonl<W: Write>(
     mut out: W,
     scored: &[ScoredShape],
     raw_events: &[CanonicalEvent],
     context_window: usize,
+    near_duplicates: &[Vec<(String, f64)>],
 ) -> std::io::Result<()> {
     let ctx = ContextIndex::build(raw_events);
     let cross_refs = crate::context::cross_references(scored);
     serde_json::to_writer(&mut out, &schema_meta())?;
     writeln!(out)?;
     for (i, s) in scored.iter().enumerate() {
-        serde_json::to_writer(&mut out, &dump_entry(i, s, &ctx, context_window, &cross_refs[i]))?;
+        let near_dups = near_duplicates.get(i).map(Vec::as_slice).unwrap_or(&[]);
+        serde_json::to_writer(&mut out, &dump_entry(i, s, &ctx, context_window, &cross_refs[i], near_dups))?;
         writeln!(out)?;
     }
     Ok(())
@@ -176,12 +200,14 @@ pub fn dump_as_values(
     scored: &[ScoredShape],
     raw_events: &[CanonicalEvent],
     context_window: usize,
+    near_duplicates: &[Vec<(String, f64)>],
 ) -> Vec<serde_json::Value> {
     let ctx = ContextIndex::build(raw_events);
     let cross_refs = crate::context::cross_references(scored);
     let mut values = vec![serde_json::to_value(schema_meta()).unwrap_or(serde_json::Value::Null)];
     values.extend(scored.iter().enumerate().map(|(i, s)| {
-        serde_json::to_value(dump_entry(i, s, &ctx, context_window, &cross_refs[i]))
+        let near_dups = near_duplicates.get(i).map(Vec::as_slice).unwrap_or(&[]);
+        serde_json::to_value(dump_entry(i, s, &ctx, context_window, &cross_refs[i], near_dups))
             .unwrap_or(serde_json::Value::Null)
     }));
     values

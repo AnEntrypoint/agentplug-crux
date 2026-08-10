@@ -73,7 +73,7 @@ pub fn handle_scan(body: &Value) -> u64 {
     let distinct_actors = field_freq.tables.get("actor").map_or(0, |t| t.len());
     let (top_actions_by_occurrence, top_actors_by_occurrence) = manifest_top_values(&field_freq, 10);
     let shapes_selected = selected.len();
-    let dump = dump_as_values(&selected, &events, context_window);
+    let dump = dump_as_values(&selected, &events, context_window, &[]);
     let score_range = score_range(&selected);
 
     let manifest = Manifest {
