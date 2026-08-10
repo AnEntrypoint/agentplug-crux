@@ -1,11 +1,22 @@
 [package]
-name = "crux"
+name = "agentplug-crux"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "agentplug_crux"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "crux"
+path = "src/main.rs"
+
 [profile.release]
-opt-level = 3
+strip = true
 lto = true
+codegen-units = 1
+opt-level = "z"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

@@ -101,41 +101,54 @@ fn schema_meta() -> SchemaMeta {
     }
 }
 
+fn dump_entry<'a>(i: usize, s: &'a ScoredShape<'a>) -> DumpEntry<'a> {
+    DumpEntry {
+        shape_id: format!("{:016x}", s.shape.shape_hash),
+        rank: i + 1,
+        score: s.score,
+        dominant_signal: dominant_signal(s.field_score, s.transition_score, s.timing_score, s.count_score),
+        score_breakdown: ScoreBreakdown {
+            field: s.field_score,
+            transition: s.transition_score,
+            timing: s.timing_score,
+            count: s.count_score,
+        },
+        occurrence_count: s.shape.count,
+        first_seen_ms: s.shape.first_seen,
+        first_seen: format_ms(s.shape.first_seen),
+        last_seen_ms: s.shape.last_seen,
+        last_seen: format_ms(s.shape.last_seen),
+        representative_event: &s.shape.representative,
+        source: Source {
+            file: s.shape.representative.source_file.clone(),
+            line: s.shape.representative.source_line,
+        },
+    }
+}
+
 pub fn write_jsonl<W: Write>(mut out: W, scored: &[ScoredShape]) -> std::io::Result<()> {
     serde_json::to_writer(&mut out, &schema_meta())?;
     writeln!(out)?;
     for (i, s) in scored.iter().enumerate() {
-        let entry = DumpEntry {
-            shape_id: format!("{:016x}", s.shape.shape_hash),
-            rank: i + 1,
-            score: s.score,
-            dominant_signal: dominant_signal(
-                s.field_score,
-                s.transition_score,
-                s.timing_score,
-                s.count_score,
-            ),
-            score_breakdown: ScoreBreakdown {
-                field: s.field_score,
-                transition: s.transition_score,
-                timing: s.timing_score,
-                count: s.count_score,
-            },
-            occurrence_count: s.shape.count,
-            first_seen_ms: s.shape.first_seen,
-            first_seen: format_ms(s.shape.first_seen),
-            last_seen_ms: s.shape.last_seen,
-            last_seen: format_ms(s.shape.last_seen),
-            representative_event: &s.shape.representative,
-            source: Source {
-                file: s.shape.representative.source_file.clone(),
-                line: s.shape.representative.source_line,
-            },
-        };
-        serde_json::to_writer(&mut out, &entry)?;
+        serde_json::to_writer(&mut out, &dump_entry(i, s))?;
         writeln!(out)?;
     }
     Ok(())
+}
+
+/// Same dump content as `write_jsonl`, as a `Vec<serde_json::Value>`
+/// instead of newline-delimited bytes -- for the wasm plugin path, which
+/// returns one JSON response rather than writing a file. `values[0]` is
+/// the `__meta` schema entry, `values[1..]` are the ranked shapes.
+pub fn dump_as_values(scored: &[ScoredShape]) -> Vec<serde_json::Value> {
+    let mut values = vec![serde_json::to_value(schema_meta()).unwrap_or(serde_json::Value::Null)];
+    values.extend(
+        scored
+            .iter()
+            .enumerate()
+            .map(|(i, s)| serde_json::to_value(dump_entry(i, s)).unwrap_or(serde_json::Value::Null)),
+    );
+    values
 }
 
 fn top_values(counts: &std::collections::HashMap<String, u64>, n: usize) -> Vec<(String, u64)> {

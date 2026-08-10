@@ -1,20 +1,12 @@
-mod baseline;
-mod dedup;
-mod emit;
-mod event;
-mod ingest;
-mod normalize;
-mod score;
-mod skiplist;
-
 use std::fs::File;
 use std::io::{self, BufWriter};
 use std::path::PathBuf;
 
 use clap::Parser;
 
-use baseline::{FieldFreq, TimingStats, TransitionFreq};
-use score::Weights;
+use agentplug_crux::baseline::{FieldFreq, TimingStats, TransitionFreq};
+use agentplug_crux::score::Weights;
+use agentplug_crux::{dedup, emit, native_ingest, score};
 
 /// crux: concentrate rare/surprising material out of large workflow trace corpora.
 #[derive(Parser)]
@@ -64,7 +56,7 @@ fn main() -> io::Result<()> {
 
     let mut all_events = Vec::new();
     for input in &args.inputs {
-        all_events.extend(ingest::ingest_path(input));
+        all_events.extend(native_ingest::ingest_path(input));
     }
     let raw_events = all_events.len();
 
