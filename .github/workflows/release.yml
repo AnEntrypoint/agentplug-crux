@@ -22,7 +22,5 @@ jobs:
       release_repo: AnEntrypoint/agentplug-crux-bin
       release_title_prefix: agentplug-crux
       build_command: cargo build --release --target wasm32-wasip1 --lib
-      npm_package_name: agentplug-crux-wasm
     secrets:
       publisher_token: ${{ secrets.PUBLISHER_TOKEN }}
-      npm_token: ${{ secrets.NPM_TOKEN }}
