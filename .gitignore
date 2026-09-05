@@ -4,3 +4,5 @@
 /.agentplug-kv
 crux-manifest.json
 *.stackdump
+config.bat
+node_modules

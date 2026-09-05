@@ -24,3 +24,4 @@ jobs:
       build_command: cargo build --release --target wasm32-wasip1 --lib
     secrets:
       publisher_token: ${{ secrets.PUBLISHER_TOKEN }}
+      release_signing_key: ${{ secrets.RELEASE_SIGNING_KEY }}
