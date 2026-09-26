@@ -17,18 +17,6 @@ fn quantize(n: u64) -> &'static str {
     }
 }
 
-/// One `CanonicalEvent` per (commit, changed file) pair, via
-/// `git log --numstat`. actor=author, action=file extension changed,
-/// status=change kind (added/modified/deleted, derived from
-/// insertions/deletions being zero -- a factual read of the numstat
-/// output, not an opinion), fields={insertions_bucket, deletions_bucket,
-/// commit_hash, dir_name}, duration_ms=insertions+deletions (reuses the
-/// same timing-quantile machinery as the file-metadata mode for a "this
-/// change was way outside the typical size for this file type" signal).
-/// timestamp=commit time.
-///
-/// Native-only: shells out to the `git` binary, which the wasm plugin
-/// sandbox has no access to (no subprocess imports in agentplug's ABI).
 pub fn scan_git_log(repo_root: &Path, max_commits: usize) -> Vec<CanonicalEvent> {
     let output = Command::new("git")
         .args([
@@ -66,10 +54,6 @@ pub fn scan_git_log(repo_root: &Path, max_commits: usize) -> Vec<CanonicalEvent>
             }
         }
 
-        // numstat line: "<insertions>\t<deletions>\t<path>" (insertions/
-        // deletions are "-" for a binary file diff, treated as 0 -- git
-        // genuinely cannot count line changes in a binary, this is not a
-        // guess).
         let Some((hash, author, ts_ms)) = &current else { continue };
         let mut parts = line.splitn(3, '\t');
         let (Some(ins_s), Some(del_s), Some(path)) = (parts.next(), parts.next(), parts.next()) else {
@@ -120,14 +104,6 @@ pub fn scan_git_log(repo_root: &Path, max_commits: usize) -> Vec<CanonicalEvent>
     events
 }
 
-/// `git log` emits commits newest-first, so events arrive in reverse
-/// chronological order per file. `source_line` is crux's only ordering
-/// key for context windows (see `context.rs`), and jsonl mode's
-/// convention is ascending = chronological -- so number each file's
-/// occurrences 1..N in ascending timestamp order (oldest first), giving
-/// every event a source_line unique within its file and making "next
-/// event in the same file" mean "the next change to this file
-/// chronologically", not an arbitrary tie among same-valued entries.
 fn assign_per_file_sequence(events: &mut [CanonicalEvent]) {
     let mut indices_by_file: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in events.iter().enumerate() {

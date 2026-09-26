@@ -10,80 +10,49 @@ use agentplug_crux::{dedup, emit, ingest_files_mode, ingest_gitlog, native_inges
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
 enum Mode {
-    /// .jsonl trace files: one event per record (the original use case --
-    /// session transcripts, workflow/orchestrator logs).
     Jsonl,
-    /// Any directory: one event per file (extension, size, depth, dir
-    /// name), no file content parsing -- works on any codebase or file
-    /// tree, surfaces structural outliers (a wildly rare extension, a file
-    /// far outside its extension's typical size band).
     Files,
-    /// A git repository: one event per (commit, changed file) via
-    /// `git log --numstat` -- surfaces history outliers (unusually large
-    /// changes, rare authorship/file-type combinations).
     Gitlog,
 }
 
-/// crux: concentrate rare/surprising material out of large, low-signal-density corpora.
 #[derive(Parser)]
 #[command(version)]
 struct Args {
-    /// Input paths (files or directories, recursed) to scan.
     #[arg(required = true)]
     inputs: Vec<PathBuf>,
 
-    /// What an "event" is: jsonl trace records, per-file structural
-    /// metadata over any codebase, or git commit history.
     #[arg(long, value_enum, default_value_t = Mode::Jsonl)]
     mode: Mode,
-    /// gitlog mode only: how many recent commits to scan.
     #[arg(long, default_value_t = 5000)]
     max_commits: usize,
 
-    /// Laplace smoothing constant applied to all frequency tables.
     #[arg(long, default_value_t = 1.0)]
     smoothing: f64,
 
-    /// Weight for field-value surprisal.
     #[arg(long, default_value_t = 1.0)]
     weight_field: f64,
-    /// Weight for transition surprisal.
     #[arg(long, default_value_t = 1.5)]
     weight_transition: f64,
-    /// Weight for timing deviation.
     #[arg(long, default_value_t = 1.0)]
     weight_timing: f64,
-    /// Weight for count rarity.
     #[arg(long, default_value_t = 0.5)]
     weight_count: f64,
 
-    /// Percentile threshold for selection (top (100-p)% of shapes by score).
     #[arg(long, default_value_t = 99.0)]
     select_percentile: f64,
-    /// Minimum number of shapes to select regardless of percentile.
     #[arg(long, default_value_t = 10)]
     select_min: usize,
-    /// Maximum number of shapes to select regardless of percentile.
     #[arg(long, default_value_t = 500)]
     select_max: usize,
 
-    /// Output path for the JSONL dump (default: stdout).
     #[arg(long)]
     out: Option<PathBuf>,
-    /// Output path for the run manifest.
     #[arg(long, default_value = "crux-manifest.json")]
     manifest: PathBuf,
 
-    /// Events immediately before/after each selected shape (same source
-    /// file) to include as context, 0 to disable.
     #[arg(long, default_value_t = 3)]
     context_window: usize,
 
-    /// --mode files only: Normalized Compression Distance threshold below
-    /// which another file counts as a near-duplicate of a selected shape
-    /// (0.0 = identical after compression, 1.0 = no shared structure).
-    /// 0 disables near-duplicate clustering entirely -- it is opt-in
-    /// extra work (a gzip pass per compared file pair), not always-on.
     #[arg(long, default_value_t = 0.0)]
     ncd_threshold: f64,
 }

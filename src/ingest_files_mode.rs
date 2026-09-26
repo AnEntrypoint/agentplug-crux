@@ -6,10 +6,6 @@ use std::path::Path;
 use crate::event::{CanonicalEvent, FieldValue};
 use crate::walk::{find_files, SkipMode};
 
-/// Log-scale buckets, same shape as `dedup::quantize_duration`, so file
-/// sizes/line counts collapse into shapes the same way durations do --
-/// two files that are both "roughly 5KB" are the same shape, a file that's
-/// 500x the corpus's typical size is not.
 fn quantize(n: u64) -> &'static str {
     match n {
         0 => "0",
@@ -23,12 +19,6 @@ fn quantize(n: u64) -> &'static str {
     }
 }
 
-/// (size_bytes, line_count) from one streaming pass: a single open file
-/// handle, size from its metadata (no separate `std::fs::metadata` stat
-/// call), newlines counted incrementally through a fixed-size buffer so a
-/// large file is never loaded into memory whole just to sniff/count it.
-/// `line_count` is `None` when the first chunk looks binary (a NUL byte),
-/// since a line count is meaningless there.
 fn size_and_line_count(path: &Path) -> Option<(u64, Option<u64>)> {
     let file = File::open(path).ok()?;
     let size_bytes = file.metadata().ok()?.len();
@@ -58,36 +48,10 @@ fn size_and_line_count(path: &Path) -> Option<(u64, Option<u64>)> {
     Some((size_bytes, line_count))
 }
 
-/// Directory walk this mode uses, exposed separately so a caller can get
-/// the raw file list once (e.g. to also drive near-dup clustering, which
-/// needs file paths, not `CanonicalEvent`s) and pass it to
-/// `scan_codebase_files` rather than have both re-walk the same tree.
 pub fn find_codebase_files(root: &Path) -> Vec<std::path::PathBuf> {
     find_files(root, SkipMode::StructuralScan)
 }
 
-/// `scan_codebase` split into its walk (`find_codebase_files`) and this
-/// per-file mapping step, so a caller needing both the events and the raw
-/// file list (near-dup clustering) walks the tree once.
-///
-/// One `CanonicalEvent` per file: no content is read beyond a streaming
-/// binary sniff and newline count (never the whole file into memory), so
-/// this mode is cheap enough to run over an entire codebase including
-/// binaries/lockfiles crux's jsonl mode would skip -- a file's own
-/// type/size/location is exactly the kind of thing whose rarity is worth
-/// scoring here, not noise to filter out first.
-///
-/// actor = top-level directory under root (crux's closest analog to
-/// "which subsystem"), action = file extension (or "(no-ext)"), fields =
-/// {depth, dir_name, size_bucket, line_count_bucket} (raw byte size and
-/// line count are NOT stored uninterpreted in fields -- they're quantized
-/// the same way duration_ms is, so shape dedup collapses "roughly the same
-/// size" files instead of treating every distinct byte count as its own
-/// shape). duration_ms carries the raw file size in bytes, reusing the
-/// existing duration-quantile machinery in baseline.rs/score.rs for a
-/// free "this file's size is way outside this extension's typical band"
-/// signal -- crux has no dedicated "size" axis, but duration_ms's timing
-/// quantiles/deviation are exactly that computation already built.
 pub fn scan_codebase_files(root: &Path, files: &[std::path::PathBuf]) -> Vec<CanonicalEvent> {
     files
         .iter()

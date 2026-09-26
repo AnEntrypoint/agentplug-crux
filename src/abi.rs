@@ -1,6 +1,3 @@
-//! wasm32-wasip1-only: the agentplug plugin ABI boundary (plugin_call /
-//! plugkit_alloc / plugkit_free) and the host filesystem imports the wasm
-//! plugin path needs. Not compiled into the native CLI build.
 #![cfg(target_arch = "wasm32")]
 
 use std::alloc::{alloc, dealloc, Layout};
@@ -70,17 +67,11 @@ pub fn return_json(v: Value) -> u64 {
     return_bytes(v.to_string().into_bytes())
 }
 
-/// Reads a whole file through the host, sandboxed to the calling plugin
-/// instance's project root (see agentplug-host's `sandboxed_guest_path`).
-/// `None` on any failure -- missing file, path outside the sandbox, or a
-/// non-UTF8 read.
 pub fn host_read(path: &str) -> Option<String> {
     let packed = unsafe { host_fs_read(path.as_ptr(), path.len() as u32) };
     unpack_to_string(packed)
 }
 
-/// Lists direct children of `path` (names only, not full paths), or an
-/// empty vec if the directory does not exist / is outside the sandbox.
 pub fn host_readdir(path: &str) -> Vec<String> {
     let packed = unsafe { host_fs_readdir(path.as_ptr(), path.len() as u32) };
     match unpack_to_string(packed).and_then(|s| serde_json::from_str::<Value>(&s).ok()) {

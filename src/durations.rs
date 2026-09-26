@@ -2,10 +2,6 @@ use std::collections::HashMap;
 
 use crate::event::{CanonicalEvent, FieldValue};
 
-/// Pairs `tool_use` events with their later `tool_result` by `tool_use_id`
-/// (within one file/session) to derive `duration_ms`, since the transcript
-/// never states it directly. Shared by both the native CLI ingest and the
-/// wasm plugin ingest -- identical logic, different I/O source.
 pub fn attach_durations(events: &mut [CanonicalEvent]) {
     let mut pending: HashMap<String, (usize, i64)> = HashMap::new();
     for i in 0..events.len() {

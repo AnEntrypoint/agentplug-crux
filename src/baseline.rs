@@ -11,8 +11,6 @@ fn field_value_key(v: &FieldValue) -> String {
     }
 }
 
-/// Per-field frequency table: field name -> (value -> occurrence count),
-/// counted by shape occurrence count so it reflects true corpus frequency.
 pub struct FieldFreq {
     pub tables: HashMap<String, HashMap<String, u64>>,
     pub totals: HashMap<String, u64>,
@@ -54,7 +52,6 @@ impl FieldFreq {
         FieldFreq { tables, totals }
     }
 
-    /// -log2(P(value|field)) with Laplace smoothing.
     pub fn surprisal(&self, field: &str, value: &str, smoothing: f64) -> f64 {
         let table = self.tables.get(field);
         let cardinality = table.map_or(0, |t| t.len()) as f64;
@@ -68,9 +65,6 @@ impl FieldFreq {
     }
 }
 
-/// First-order Markov table of action_i -> action_{i+1}, grouped per actor
-/// (session), in timestamp order (fallback: dedup insertion order carries no
-/// ordering, so transitions are only meaningful when timestamps exist).
 pub struct TransitionFreq {
     pub tables: HashMap<String, HashMap<String, u64>>, // from -> (to -> count)
     pub totals: HashMap<String, u64>,                  // from -> total count
@@ -78,11 +72,6 @@ pub struct TransitionFreq {
 
 impl TransitionFreq {
     pub fn build(shapes: &[DedupedShape]) -> Self {
-        // Reconstruct approximate per-actor sequences from deduped
-        // representatives ordered by first_seen. This loses exact-repeat
-        // transitions (already collapsed by dedup) but preserves the set of
-        // distinct transitions that occurred, which is what novelty
-        // detection needs.
         let mut by_actor: HashMap<String, Vec<(&DedupedShape, i64)>> = HashMap::new();
         for shape in shapes {
             let actor = shape
@@ -131,8 +120,6 @@ impl TransitionFreq {
     }
 }
 
-/// Per-action duration quantiles (p50/p90/p99), for scoring how far a
-/// shape's duration sits from its action's typical band.
 pub struct TimingStats {
     pub quantiles: HashMap<String, (f64, f64, f64)>, // action -> (p50, p90, p99)
 }
@@ -172,8 +159,6 @@ impl TimingStats {
         TimingStats { quantiles }
     }
 
-    /// 0 if within p1-p99 band (approximated as within p99 of the median
-    /// direction), else normalized distance beyond p99.
     pub fn deviation(&self, action: &str, duration_ms: f64) -> f64 {
         let Some(&(p50, _p90, p99)) = self.quantiles.get(action) else {
             return 0.0;

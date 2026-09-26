@@ -21,10 +21,6 @@ fn json_to_field(v: &Value) -> Option<FieldValue> {
     }
 }
 
-/// Splits one raw transcript line into zero or more canonical events.
-/// A line with multiple `content` blocks (e.g. an assistant turn with several
-/// tool_use calls) yields one event per block, so each tool call is scored
-/// independently against the corpus baseline.
 pub fn normalize_line(source_file: &str, source_line: u64, raw: &str) -> Vec<CanonicalEvent> {
     let Ok(v) = serde_json::from_str::<Value>(raw) else {
         return Vec::new();
