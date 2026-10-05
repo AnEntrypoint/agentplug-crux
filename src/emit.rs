@@ -15,10 +15,6 @@ fn format_ms(ms: Option<i64>) -> Option<String> {
         .and_then(|t| t.format(&Rfc3339).ok())
 }
 
-/// Which score component contributed the largest share of the total, so a
-/// consumer can sort/filter by "why this is rare" without recomputing the
-/// breakdown itself. Names the loudest signal, states no opinion on
-/// whether that's good or bad.
 fn dominant_signal(field: f64, transition: f64, timing: f64, count: f64) -> &'static str {
     let mut best = ("field", field);
     for candidate in [("transition", transition), ("timing", timing), ("count", count)] {
@@ -43,11 +39,6 @@ struct Source {
     line: u64,
 }
 
-/// (path, ncd) pair, plugin-agnostic shape so `emit.rs` (shared, compiles
-/// for both native and wasm targets) never depends on `near_dup.rs`
-/// (native-only: it does real file I/O gzip currently has no wasm-plugin
-/// path for). The `--mode files`-only feature; other modes/the plugin's
-/// jsonl-only `scan` verb always pass an empty slice per entry.
 #[derive(Serialize)]
 struct NearDuplicateOut {
     path: String,
@@ -170,9 +161,6 @@ fn dump_entry<'a>(
     }
 }
 
-/// `near_duplicates[i]` is the `(path, ncd)` list for `scored[i]` --
-/// `--mode files` only; pass a same-length slice of empty vecs from every
-/// other mode or when the feature is disabled.
 pub fn write_jsonl<W: Write>(
     mut out: W,
     scored: &[ScoredShape],
@@ -192,10 +180,6 @@ pub fn write_jsonl<W: Write>(
     Ok(())
 }
 
-/// Same dump content as `write_jsonl`, as a `Vec<serde_json::Value>`
-/// instead of newline-delimited bytes -- for the wasm plugin path, which
-/// returns one JSON response rather than writing a file. `values[0]` is
-/// the `__meta` schema entry, `values[1..]` are the ranked shapes.
 pub fn dump_as_values(
     scored: &[ScoredShape],
     raw_events: &[CanonicalEvent],

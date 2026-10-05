@@ -70,13 +70,6 @@ pub fn score_shapes<'a>(
                     field_freq.surprisal(&format!("fields.{k}"), &field_value_key(v), smoothing);
             }
 
-            // Transition surprisal needs a "from" action; approximate by
-            // scoring this shape's action as a "to" against every "from" it
-            // was observed following. Since DedupedShape does not retain
-            // predecessor identity post-collapse, fall back to the max
-            // surprisal of this action appearing as a transition target
-            // across the whole table, which still flags actions that only
-            // ever showed up in rare transitions.
             let transition_score = e
                 .action
                 .as_deref()

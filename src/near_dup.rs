@@ -3,22 +3,6 @@ use std::path::Path;
 use crate::ncd::ncd;
 use crate::score::ScoredShape;
 
-/// Cap on file size compared for NCD. This is NOT primarily a cost bound
-/// (gzip itself is cheap) -- it is a correctness bound: DEFLATE's sliding
-/// window is a hard-capped 32KB, so once two files (or the shared region
-/// between them) exceed a few multiples of that window, the compressor
-/// genuinely cannot see the similarity anymore and NCD saturates toward
-/// 1.0 regardless of how similar the files actually are. Confirmed
-/// empirically: two real files 179,821 and 180,004 bytes, ~99% textually
-/// identical (a handful of changed lines in an otherwise-identical
-/// ~1300-line shader), scored NCD=0.982 (near-maximal "different") before
-/// this cap existed -- a false negative caused by file size, not a flaw in
-/// the pair. 96KB (3x the DEFLATE window) is a deliberately conservative
-/// cap that keeps NCD meaningful; files above it are simply never
-/// compared (no near_duplicates entry), not an error -- see the crate
-/// README for the tradeoff this implies (near-dup detection covers
-/// small-to-medium files reliably, large-file near-duplication is a
-/// known gap, not silently wrong).
 const MAX_COMPARE_BYTES: u64 = 96 * 1024;
 
 pub struct NearDuplicate {
@@ -26,24 +10,6 @@ pub struct NearDuplicate {
     pub ncd: f64,
 }
 
-/// For each selected files-mode shape, finds other files in the corpus
-/// whose content compresses near-identically to it (NCD below
-/// `threshold`) -- the signal exact-shape hashing structurally cannot see,
-/// since two files differing by even one byte hash completely
-/// differently, while near-duplicates (a copy-pasted config with one
-/// field changed, a vendored variant of the same source) compress
-/// together almost as well as either compresses alone.
-///
-/// Bounded to O(selected * corpus), never O(corpus^2): only the shapes
-/// crux already selected as individually rare get compared against the
-/// full file list, not every file against every other file. Within that,
-/// a same-extension + same-order-of-magnitude-size prefilter skips the
-/// gzip calls entirely for pairs NCD could not plausibly call near-dup
-/// anyway (two files of very different size cannot compress
-/// near-identically together by the metric's own definition), which is
-/// the dominant cost saving in practice -- gzip itself is cheap per call,
-/// but a full corpus of thousands of files times a handful of selected
-/// shapes without this filter still adds up.
 pub fn find_near_duplicates<'a>(
     selected: &[ScoredShape<'a>],
     corpus_files: &[std::path::PathBuf],
@@ -82,11 +48,6 @@ pub fn find_near_duplicates<'a>(
                 if cand_size == 0 || cand_size > MAX_COMPARE_BYTES {
                     continue;
                 }
-                // Same-order-of-magnitude prefilter: NCD cannot score near
-                // a very size-mismatched pair as similar (the larger
-                // file's own compressed size alone exceeds the ratio a low
-                // NCD requires), so skip the read+compress entirely rather
-                // than compute and discard.
                 let (small, large) = if target_size < cand_size {
                     (target_size, cand_size)
                 } else {

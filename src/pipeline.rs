@@ -1,5 +1,3 @@
-//! wasm32-wasip1-only: the `scan` verb handler tying ingest/dedup/baseline/
-//! score/emit together into one plugin dispatch.
 #![cfg(target_arch = "wasm32")]
 
 use serde_json::Value;
@@ -17,12 +15,6 @@ fn usize_field(body: &Value, key: &str, default: usize) -> usize {
     body.get(key).and_then(Value::as_u64).map(|v| v as usize).unwrap_or(default)
 }
 
-/// `scan` verb: recursively finds `.jsonl` files under `body.root` (relative
-/// to the calling project's root, default "."), concentrates rare/surprising
-/// shapes out of them, and returns `{ok, dump, manifest}` in one call --
-/// there is no persistent process to stream results across, so a plugin
-/// dispatch does the whole ingest/dedup/baseline/score/select pipeline in
-/// one shot and returns the finished dump inline.
 pub fn handle_scan(body: &Value) -> u64 {
     let cwd = host_cwd_string();
     let requested_root = body.get("root").and_then(Value::as_str).unwrap_or(".");

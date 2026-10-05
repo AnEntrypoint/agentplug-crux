@@ -26,10 +26,6 @@ fn ingest_files(files: Vec<std::path::PathBuf>) -> impl Iterator<Item = Canonica
     })
 }
 
-/// Accepts either a single `.jsonl` file or a directory (recursed for
-/// `.jsonl` files) and yields canonical events, in file-then-line order.
-/// Malformed lines are skipped, not fatal: a corpus this size always has a
-/// few truncated tail lines from an interrupted write.
 pub fn ingest_jsonl_path(path: &Path) -> Box<dyn Iterator<Item = CanonicalEvent>> {
     if path.is_dir() {
         let files: Vec<_> = find_files(path, SkipMode::ContentIngest)

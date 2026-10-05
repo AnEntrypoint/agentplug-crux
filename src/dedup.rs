@@ -5,8 +5,6 @@ use std::hash::Hasher;
 
 use crate::event::{CanonicalEvent, FieldValue};
 
-/// Log-scale duration buckets so nearby latencies collapse into the same
-/// shape instead of every millisecond producing a distinct shape.
 fn quantize_duration(ms: f64) -> &'static str {
     match ms {
         d if d < 1.0 => "0-1ms",

@@ -1,5 +1,3 @@
-//! wasm32-wasip1-only: directory scanning driven by host filesystem
-//! imports instead of native std::fs (the plugin has no native fs access).
 #![cfg(target_arch = "wasm32")]
 
 use crate::abi::{host_read, host_readdir, host_stat};
@@ -32,10 +30,6 @@ fn gitignore_excludes(gi: &Option<ignore::gitignore::Gitignore>, rel_path: &str,
     }
 }
 
-/// Recursively walks `root` via host filesystem imports, skipping the same
-/// directories/files gm's own code-index skips and honoring `.gitignore`
-/// at `root`, then yields canonical events from every `.jsonl` file found,
-/// in file-then-line order.
 pub fn scan_project(root: &str, max_files: usize) -> Vec<CanonicalEvent> {
     let gi = load_gitignore(root);
     let mut files = Vec::new();
