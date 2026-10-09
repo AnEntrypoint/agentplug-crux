@@ -1,6 +1,6 @@
 #![cfg(target_arch = "wasm32")]
 
-use crate::abi::{host_read, host_readdir, host_stat};
+use crate::abi::{host_read, host_readdir, host_stat, FsKind};
 use crate::durations::attach_durations;
 use crate::event::CanonicalEvent;
 use crate::normalize::normalize_line;
@@ -60,7 +60,7 @@ fn walk(root: &str, gi: &Option<ignore::gitignore::Gitignore>, max_files: usize,
         }
         let next = join(root, &name);
         let stat = host_stat(&next);
-        let is_dir = stat.as_ref().map(|s| s.is_dir).unwrap_or(false);
+        let is_dir = stat == Some(FsKind::Directory);
 
         if is_dir {
             if skiplist::is_hidden_segment(&name) || skiplist::is_skipped_dir_segment(&name) {

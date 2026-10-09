@@ -80,22 +80,26 @@ pub fn host_readdir(path: &str) -> Vec<String> {
     }
 }
 
-pub struct Stat {
-    pub is_dir: bool,
-    #[allow(dead_code)] // part of the host_fs_stat response shape; unused by scan today
-    pub is_file: bool,
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FsKind {
+    Directory,
+    File,
+    Other,
 }
 
-pub fn host_stat(path: &str) -> Option<Stat> {
+pub fn host_stat(path: &str) -> Option<FsKind> {
     let packed = unsafe { host_fs_stat(path.as_ptr(), path.len() as u32) };
     let v: Value = unpack_to_string(packed).and_then(|s| serde_json::from_str(&s).ok())?;
     if v.is_null() {
         return None;
     }
-    Some(Stat {
-        is_dir: v.get("isDirectory").and_then(Value::as_bool).unwrap_or(false),
-        is_file: v.get("isFile").and_then(Value::as_bool).unwrap_or(false),
-    })
+    if v.get("isDirectory").and_then(Value::as_bool).unwrap_or(false) {
+        Some(FsKind::Directory)
+    } else if v.get("isFile").and_then(Value::as_bool).unwrap_or(false) {
+        Some(FsKind::File)
+    } else {
+        Some(FsKind::Other)
+    }
 }
 
 pub fn host_cwd_string() -> String {
