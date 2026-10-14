@@ -31,17 +31,17 @@ impl FieldFreq {
         };
 
         for shape in shapes {
-            let e = &shape.representative;
-            if let Some(actor) = &e.actor {
+            let representative_event = &shape.representative;
+            if let Some(actor) = &representative_event.actor {
                 bump("actor", actor.clone(), shape.count);
             }
-            if let Some(action) = &e.action {
+            if let Some(action) = &representative_event.action {
                 bump("action", action.clone(), shape.count);
             }
-            if let Some(status) = &e.status {
+            if let Some(status) = &representative_event.status {
                 bump("status", status.clone(), shape.count);
             }
-            for (k, v) in &e.fields {
+            for (k, v) in &representative_event.fields {
                 if k == "tool_use_id" {
                     continue;
                 }
@@ -60,8 +60,8 @@ impl FieldFreq {
             .and_then(|t| t.get(value))
             .copied()
             .unwrap_or(0) as f64;
-        let p = (count + smoothing) / (total + smoothing * cardinality.max(1.0));
-        -p.max(f64::MIN_POSITIVE).log2()
+        let probability = (count + smoothing) / (total + smoothing * cardinality.max(1.0));
+        -probability.max(f64::MIN_POSITIVE).log2()
     }
 }
 
@@ -115,8 +115,8 @@ impl TransitionFreq {
         let cardinality = table.map_or(0, |t| t.len()) as f64;
         let total = *self.totals.get(from).unwrap_or(&0) as f64;
         let count = table.and_then(|t| t.get(to)).copied().unwrap_or(0) as f64;
-        let p = (count + smoothing) / (total + smoothing * cardinality.max(1.0));
-        -p.max(f64::MIN_POSITIVE).log2()
+        let probability = (count + smoothing) / (total + smoothing * cardinality.max(1.0));
+        -probability.max(f64::MIN_POSITIVE).log2()
     }
 }
 
@@ -136,8 +136,8 @@ impl TimingStats {
     pub fn build(shapes: &[DedupedShape]) -> Self {
         let mut by_action: HashMap<String, Vec<f64>> = HashMap::new();
         for shape in shapes {
-            let e = &shape.representative;
-            if let (Some(action), Some(d)) = (&e.action, e.duration_ms) {
+            let representative_event = &shape.representative;
+            if let (Some(action), Some(d)) = (&representative_event.action, representative_event.duration_ms) {
                 by_action
                     .entry(action.clone())
                     .or_default()

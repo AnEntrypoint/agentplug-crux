@@ -11,14 +11,14 @@ fn compressed_len(data: &[u8]) -> u64 {
 
 pub fn ncd(a: &[u8], b: &[u8]) -> f64 {
     let ca = compressed_len(a);
-    let cb = compressed_len(b);
+    let compressed_length_b = compressed_len(b);
     let mut combined = Vec::with_capacity(a.len() + b.len());
     combined.extend_from_slice(a);
     combined.extend_from_slice(b);
     let cab = compressed_len(&combined);
 
-    let min_c = ca.min(cb) as f64;
-    let max_c = ca.max(cb) as f64;
+    let min_c = ca.min(compressed_length_b) as f64;
+    let max_c = ca.max(compressed_length_b) as f64;
     if max_c == 0.0 {
         return 0.0; // both inputs empty -- identically (non-)informative
     }

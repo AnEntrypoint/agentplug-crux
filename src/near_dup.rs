@@ -58,11 +58,11 @@ pub fn find_near_duplicates<'a>(
                 }
 
                 let Ok(cand_bytes) = std::fs::read(candidate) else { continue };
-                let d = ncd(&target_bytes, &cand_bytes);
-                if d <= threshold {
+                let distance = ncd(&target_bytes, &cand_bytes);
+                if distance <= threshold {
                     hits.push(NearDuplicate {
                         path: candidate.to_string_lossy().into_owned(),
-                        ncd: d,
+                        ncd: distance,
                     });
                 }
             }
