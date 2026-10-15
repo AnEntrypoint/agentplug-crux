@@ -50,19 +50,19 @@ pub fn score_shapes<'a>(
     shapes
         .iter()
         .map(|shape| {
-            let e = &shape.representative;
+            let representative = &shape.representative;
 
             let mut field_score = 0.0;
-            if let Some(actor) = &e.actor {
+            if let Some(actor) = &representative.actor {
                 field_score += field_freq.surprisal("actor", actor, smoothing);
             }
-            if let Some(action) = &e.action {
+            if let Some(action) = &representative.action {
                 field_score += field_freq.surprisal("action", action, smoothing);
             }
-            if let Some(status) = &e.status {
+            if let Some(status) = &representative.status {
                 field_score += field_freq.surprisal("status", status, smoothing);
             }
-            for (k, v) in &e.fields {
+            for (k, v) in &representative.fields {
                 if k == "tool_use_id" {
                     continue;
                 }
@@ -70,7 +70,7 @@ pub fn score_shapes<'a>(
                     field_freq.surprisal(&format!("fields.{k}"), &field_value_key(v), smoothing);
             }
 
-            let transition_score = e
+            let transition_score = representative
                 .action
                 .as_deref()
                 .map(|to| {
@@ -83,7 +83,7 @@ pub fn score_shapes<'a>(
                 .unwrap_or(0.0)
                 .min(20.0); // cap: a to-value absent everywhere shouldn't dominate
 
-            let timing_score = match (&e.action, e.duration_ms) {
+            let timing_score = match (&representative.action, representative.duration_ms) {
                 (Some(action), Some(d)) => timing.deviation(action, d),
                 _ => 0.0,
             };
