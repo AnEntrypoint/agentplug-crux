@@ -1,0 +1,7 @@
+/target
+/.gm
+/.claude
+/.agentplug-kv
+crux-manifest.json
+*.stackdump
+node_modules
